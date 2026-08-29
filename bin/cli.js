@@ -1,0 +1,161 @@
+#!/usr/bin/env node
+'use strict';
+/**
+ * antigravity-i18n CLI — community language packs for Google Antigravity.
+ *
+ *   agy18n scan                 compute per-language translation workloads
+ *   agy18n status               show detected installs, packs and locale
+ *   agy18n build <lang>         build dist/…vsix from locales/<lang>/strings.json
+ *   agy18n install <lang>       build + install via the IDE CLI, set argv.json locale
+ *   agy18n uninstall <lang>     remove our pack for <lang>
+ *   agy18n scaffold <lang>      create locales/<lang>/strings.json from the worklist
+ */
+const fs = require('fs');
+const path = require('path');
+const repoRoot = path.resolve(__dirname, '..');
+const { findIde, findBasePacks } = require('../lib/locate');
+const { scan, topModules } = require('../lib/scan');
+const { buildVsix, extensionId } = require('../lib/vsix');
+const { install, uninstall, setLocale, listInstalled, readLocale } = require('../lib/install');
+
+function languages() {
+  return JSON.parse(fs.readFileSync(path.join(repoRoot, 'locales', 'languages.json'), 'utf8'));
+}
+
+function pkgVersion() {
+  return JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).version;
+}
+
+function mustIde() {
+  const ide = findIde();
+  if (!ide) {
+    console.error('Could not locate an Antigravity IDE installation.\nSet ANTIGRAVITY_APP_DIR=<...>/resources/app and retry.');
+    process.exit(1);
+  }
+  return ide;
+}
+
+function mustLang(lang) {
+  const langs = languages();
+  const meta = langs[lang];
+  if (!meta) {
+    console.error(`Unknown language "${lang}". Known: ${Object.keys(langs).join(', ')}.\nAdd it to locales/languages.json first (see CONTRIBUTING.md).`);
+    process.exit(1);
+  }
+  return meta;
+}
+
+const [, , cmd, arg] = process.argv;
+const flags = process.argv.slice(2).filter((a) => a.startsWith('--'));
+const verbose = flags.includes('--verbose');
+const noCli = flags.includes('--no-cli');
+
+try {
+  switch (cmd) {
+    case 'scan': {
+      const ide = mustIde();
+      const lang = arg && !arg.startsWith('--') ? arg : undefined;
+      const s = scan({ repoRoot, ide, lang });
+      console.log(`Antigravity IDE ${s.ide.ideVersion || s.ide.version} — ${s.catalog.modules} modules / ${s.catalog.messages} messages`);
+      console.log(`Base packs installed: ${s.basePacksDetected.join(', ') || 'none'}`);
+      for (const g of s.generated) console.log(`  ${g.lang.padEnd(8)} ${String(g.strings).padStart(5)} strings  ->  ${g.file}  (${g.basis})`);
+      console.log(`Fork-specific strings overall: ${s.forkStrings} (locales/_meta/fork.en.json)`);
+      break;
+    }
+    case 'status': {
+      const ide = mustIde();
+      console.log(`IDE install : ${ide.appDir}`);
+      console.log(`Version     : Antigravity ${ide.ideVersion || '?'} (VS Code base ${ide.version})`);
+      console.log(`CLI         : ${ide.cli || 'not found'}`);
+      console.log(`Data dir    : ${ide.dataDir}`);
+      console.log(`Locale      : ${readLocale(ide.dataDir) || '(system default)'}`);
+      const inst = listInstalled(ide);
+      console.log(`Our packs   : ${inst.ours.join(', ') || 'none'}`);
+      console.log(`Base packs  : ${inst.base.join(', ') || 'none'}`);
+      break;
+    }
+    case 'build': {
+      if (!arg) { console.error('usage: agy18n build <lang>'); process.exit(1); }
+      const ide = mustIde();
+      const meta = mustLang(arg);
+      const r = buildVsix({
+        repoRoot, lang: arg, meta,
+        outDir: path.join(repoRoot, 'dist'),
+        version: pkgVersion(),
+        ideInfo: ide,
+      });
+      console.log(`Built ${path.relative(repoRoot, r.outFile)} — ${r.translated} translated strings across ${r.modules} modules`);
+      break;
+    }
+    case 'install': {
+      if (!arg) { console.error('usage: agy18n install <lang> [--no-cli] [--verbose]'); process.exit(1); }
+      const ide = mustIde();
+      const meta = mustLang(arg);
+      const built = buildVsix({
+        repoRoot, lang: arg, meta,
+        outDir: path.join(repoRoot, 'dist'),
+        version: pkgVersion(),
+        ideInfo: ide,
+      });
+      console.log(`Built ${path.relative(repoRoot, built.outFile)} (${built.translated} strings)`);
+      const r = install(ide, built.outFile, arg, pkgVersion(), { verbose, noCli });
+      const argvFile = setLocale(ide.dataDir, meta.languageId);
+      console.log(`Installed (${r.how}): ${r.message}`);
+      console.log(`Locale set to "${meta.languageId}" in ${argvFile}`);
+      console.log('→ Restart Antigravity to apply. Uninstall anytime with: agy18n uninstall ' + arg);
+      break;
+    }
+    case 'uninstall': {
+      if (!arg) { console.error('usage: agy18n uninstall <lang>'); process.exit(1); }
+      const ide = mustIde();
+      const r = uninstall(ide, arg);
+      console.log(`${r.message} (${r.how})`);
+      break;
+    }
+    case 'scaffold': {
+      if (!arg) { console.error('usage: agy18n scaffold <lang>'); process.exit(1); }
+      mustLang(arg);
+      const worklist = path.join(repoRoot, 'locales', '_meta', `${arg}.missing.json`);
+      const fallback = path.join(repoRoot, 'locales', '_meta', 'fork.en.json');
+      const source = [worklist, fallback].find((f) => fs.existsSync(f));
+      if (!source) { console.error('No worklist found — run `agy18n scan` first.'); process.exit(1); }
+      const en = JSON.parse(fs.readFileSync(source, 'utf8'));
+      const dir = path.join(repoRoot, 'locales', arg);
+      fs.mkdirSync(dir, { recursive: true });
+      const stringsFile = path.join(dir, 'strings.json');
+      if (fs.existsSync(stringsFile)) { console.error(`${stringsFile} already exists — not overwriting.`); process.exit(1); }
+      const skeleton = {};
+      for (const [k, v] of Object.entries(en)) skeleton[k] = ''; // translator fills these in
+      fs.writeFileSync(stringsFile, JSON.stringify(skeleton, null, '\t'));
+      console.log(`Created ${path.relative(repoRoot, stringsFile)} with ${Object.keys(en).length} slots (empty = English fallback).`);
+      console.log(`English reference: ${path.relative(repoRoot, source)}`);
+      console.log(`Top modules to start with:`);
+      for (const [mod, n] of topModules(en, 10)) console.log(`  ${mod} (${n})`);
+      break;
+    }
+    default:
+      console.log(__doc__);
+  }
+} catch (err) {
+  console.error('error:', err.message);
+  if (verbose) console.error(err.stack);
+  process.exit(1);
+}
+
+const __doc__ = `
+antigravity-i18n — community language packs for Google Antigravity
+
+commands:
+  scan               compute per-language translation workloads (writes locales/_meta/*)
+  status             show detected IDE install, installed packs, current locale
+  build <lang>       build dist/antigravity-language-pack-<lang>-*.vsix
+  install <lang>     build + install + set argv.json locale  [--no-cli] [--verbose]
+  uninstall <lang>   remove our pack for <lang>
+  scaffold <lang>    create locales/<lang>/strings.json from the scan worklist
+
+env overrides:
+  ANTIGRAVITY_APP_DIR   path to an install's resources/app
+  ANTIGRAVITY_DATA_DIR  path to the IDE user-data folder
+
+docs: https://github.com/HNUYJJ/antigravity-i18n
+`;

@@ -1,0 +1,33 @@
+{
+  "name": "antigravity-i18n",
+  "displayName": "antigravity-i18n",
+  "description": "Community language packs for Google Antigravity (IDE + Agent Manager) — translate only what official packs miss. 为 Google Antigravity 提供社区多语言语言包。",
+  "version": "0.1.0",
+  "license": "MIT",
+  "publisher": "agy-i18n",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HNUYJJ/antigravity-i18n"
+  },
+  "bin": {
+    "agy18n": "./bin/cli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "scan": "node bin/cli.js scan",
+    "status": "node bin/cli.js status",
+    "build": "node bin/cli.js build",
+    "install": "node bin/cli.js install"
+  },
+  "keywords": [
+    "antigravity",
+    "google",
+    "i18n",
+    "l10n",
+    "language-pack",
+    "localization",
+    "vscode"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-08-29T07:00:47.290Z",
+  "ide": {
+    "version": "1.107.0",
+    "ideVersion": "2.5.5",
+    "appDir": "C:\\Users\\HNU_NJU_YJJ\\AppData\\Local\\Programs\\Antigravity IDE\\resources\\app"
+  },
+  "catalog": {
+    "modules": 1390,
+    "messages": 16555
+  },
+  "basePacksDetected": [
+    "zh-cn"
+  ],
+  "generated": [
+    {
+      "lang": "zh-cn",
+      "basis": "delta vs installed base pack for \"zh-cn\"",
+      "strings": 1166,
+      "file": "locales\\_meta\\zh-cn.missing.json"
+    }
+  ],
+  "forkStrings": 104
+}
