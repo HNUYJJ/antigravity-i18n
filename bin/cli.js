@@ -17,6 +17,7 @@ const { findIde, findBasePacks } = require('../lib/locate');
 const { scan, topModules } = require('../lib/scan');
 const { buildVsix, extensionId } = require('../lib/vsix');
 const { install, uninstall, setLocale, listInstalled, readLocale } = require('../lib/install');
+const { extractCandidates, patchAgentBundle, restoreAgentBundle, agentBundlePath, readMarker } = require('../lib/agentui');
 
 function languages() {
   return JSON.parse(fs.readFileSync(path.join(repoRoot, 'locales', 'languages.json'), 'utf8'));
@@ -131,6 +132,44 @@ try {
       console.log(`English reference: ${path.relative(repoRoot, source)}`);
       console.log(`Top modules to start with:`);
       for (const [mod, n] of topModules(en, 10)) console.log(`  ${mod} (${n})`);
+      break;
+    }
+    case 'scan-agent': {
+      const ide = mustIde();
+      const bundle = agentBundlePath(ide);
+      const cands = extractCandidates(fs.readFileSync(bundle, 'utf8'));
+      const filtered = cands.filter((s) => /^[A-Z][A-Za-z0-9 '&,.:%+()/\-]{2,58}$/.test(s) && /[a-z]{3}/.test(s));
+      const out = path.join(repoRoot, 'locales', '_meta', 'agent-ui.filtered.json');
+      fs.mkdirSync(path.dirname(out), { recursive: true });
+      fs.writeFileSync(out, JSON.stringify(filtered, null, 1));
+      console.log(`${path.relative(repoRoot, bundle)}: ${filtered.length} candidate UI strings -> ${path.relative(repoRoot, out)}`);
+      break;
+    }
+    case 'patch-agent': {
+      if (!arg) { console.error('usage: agy18n patch-agent <lang>'); process.exit(1); }
+      mustLang(arg);
+      const ide = mustIde();
+      const mapFile = path.join(repoRoot, 'locales', arg, 'agent-ui.json');
+      if (!fs.existsSync(mapFile)) { console.error(`no agent-ui map: ${path.relative(repoRoot, mapFile)}`); process.exit(1); }
+      const raw = JSON.parse(fs.readFileSync(mapFile, 'utf8'));
+      const map = Object.fromEntries(Object.entries(raw).filter(([k]) => !k.startsWith('_')));
+      const bundle = agentBundlePath(ide);
+      const r = patchAgentBundle(bundle, map, { lang: arg, version: pkgVersion() });
+      console.log(`${r.status}: ${bundle}`);
+      console.log(`replacements applied: ${r.applied}${r.missed && r.missed.length ? `\nnot found in bundle (check exact literal): ${r.missed.slice(0, 10).join(' | ')}${r.missed.length > 10 ? ` +${r.missed.length - 10} more` : ''}` : ''}`);
+      console.log('→ Fully close Antigravity windows (IDE + Manager) and reopen to apply. Restore with: agy18n restore-agent');
+      break;
+    }
+    case 'restore-agent': {
+      const ide = mustIde();
+      const r = restoreAgentBundle(agentBundlePath(ide));
+      console.log(`${r.status}${r.was ? ` (was: ${r.was})` : ''}: ${agentBundlePath(ide)}`);
+      break;
+    }
+    case 'agent-status': {
+      const ide = mustIde();
+      const m = readMarker(agentBundlePath(ide));
+      console.log(m ? `patched: lang=${m.lang} applied=${m.applied} at ${m.patchedAt}` : 'agent-UI bundle: not patched');
       break;
     }
     default:

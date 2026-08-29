@@ -40,7 +40,24 @@ node bin/cli.js uninstall ja    # roll back
 
 You can keep the official MS pack installed alongside — VS Code merges them; your pack wins only for keys it defines.
 
-## 4. Open the PR
+## 4b. Agent-UI strings (the React surfaces)
+
+The Agent Manager window and agent panel have no NLS mechanism — their strings are literals inside `out/jetskiAgent/main.js`. Translating them is a second, simpler file:
+
+```bash
+node bin/cli.js scan-agent                  # candidate literals -> locales/_meta/agent-ui.filtered.json
+# create locales/<lang>/agent-ui.json — flat map { "English literal": "Your translation" }
+node bin/cli.js patch-agent <lang>          # backup + syntax-validate + patch (restore-agent reverts)
+```
+
+Rules for `agent-ui.json`:
+
+1. Keys must **exactly match** the double-quoted literals in the bundle (copy them from `agent-ui.filtered.json`).
+2. **Do not translate short enum-like words** (`Queue`, `Running`, `Local`, `Idle`…) — they may be compared in app logic. Two words or more is the safe zone.
+3. Keep product terms per your language's convention (zh-cn keeps `Agent`, `MCP`, `IDE`).
+4. The patch reports any keys it couldn't find — usually a typo or a literal that only exists in a different Antigravity version.
+
+## 5. Open the PR
 
 One language per PR. Run `node bin/cli.js build <lang>` to make sure the VSIX builds, and paste the string count in the PR description. Translators get credited in the release notes and the README table — that's the deal.
 
