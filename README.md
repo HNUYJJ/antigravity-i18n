@@ -13,11 +13,11 @@
 | --- | --- | --- |
 | VS Code base UI (menus, editor, settings…) | official MS language packs (install alongside) | ✅ managed by MS |
 | Workbench-level agent UI: agent side panel, welcome, agent sessions, model management, chat status (`nls.*` catalog) | **language pack VSIX** built from this repo, installed through Antigravity's own CLI — the official NLS mechanism, verified merging with the MS pack | ✅ untranslated keys fall back to English |
-| Agent Manager window + React agent panel (`out/jetskiAgent/main.js`, no i18n hooks) | **guarded string patch**: pristine backup → syntax-validated replacement → hash marker → one-command restore; re-applies cleanly after IDE updates | ⚠️ reversible by design (`restore-agent`) |
+| Agent Manager window + React agent panel (`out/jetskiAgent/main.js`, `out/vs/workbench/workbench.desktop.main.js` — no i18n hooks) | **guarded string patch**: pristine backup → syntax-validated replacement → **product.json checksums re-synced** (the IDE verifies SHA-256 at startup and otherwise warns "installation appears corrupt") → hash marker → one-command restore; re-applies cleanly after IDE updates | ⚠️ reversible by design (`restore-agent`) |
 
 On Antigravity IDE 2.5.5 the NLS delta is ~1,166 strings for zh-cn and the React agent surfaces add ~1,200 hardcoded literals. That is a weekend-sized workload per language — which is exactly why no one has done it beyond Chinese, and nobody has done it beyond Chinese at all.
 
-**Honesty note:** only `patch-agent` modifies a file inside the IDE install, and only because those surfaces have no supported i18n mechanism. It keeps a pristine `.agy-orig` backup, runs `node --check` on the patched output *before* writing, records hashes in a marker file, and `restore-agent` reverts exactly. The `strings.json` language-pack path never touches app files.
+**Honesty note:** only `patch-agent` modifies files inside the IDE install, and only because those surfaces have no supported i18n mechanism. It keeps pristine `.agy-orig` backups, runs `node --check` on the patched output *before* writing, records hashes in marker files, and — importantly — **re-computes and updates the `product.json` integrity checksums** for every patched file, so Google's startup integrity check keeps passing instead of scaring users with "your installation appears to be corrupt". `restore-agent` reverts files *and* checksums exactly. The `strings.json` language-pack path never touches app files.
 
 ## Quick start
 

@@ -17,7 +17,7 @@ const { findIde, findBasePacks } = require('../lib/locate');
 const { scan, topModules } = require('../lib/scan');
 const { buildVsix, extensionId } = require('../lib/vsix');
 const { install, uninstall, setLocale, listInstalled, readLocale } = require('../lib/install');
-const { extractCandidates, patchAgentBundle, restoreAgentBundle, agentBundlePath, readMarker } = require('../lib/agentui');
+const { extractCandidates, patchAgentBundle, restoreAgentBundle, targetPaths, syncIntegrity, restoreIntegrity, readMarker } = require('../lib/agentui');
 
 function languages() {
   return JSON.parse(fs.readFileSync(path.join(repoRoot, 'locales', 'languages.json'), 'utf8'));
@@ -153,23 +153,35 @@ try {
       if (!fs.existsSync(mapFile)) { console.error(`no agent-ui map: ${path.relative(repoRoot, mapFile)}`); process.exit(1); }
       const raw = JSON.parse(fs.readFileSync(mapFile, 'utf8'));
       const map = Object.fromEntries(Object.entries(raw).filter(([k]) => !k.startsWith('_')));
-      const bundle = agentBundlePath(ide);
-      const r = patchAgentBundle(bundle, map, { lang: arg, version: pkgVersion() });
-      console.log(`${r.status}: ${bundle}`);
-      console.log(`replacements applied: ${r.applied}${r.missed && r.missed.length ? `\nnot found in bundle (check exact literal): ${r.missed.slice(0, 10).join(' | ')}${r.missed.length > 10 ? ` +${r.missed.length - 10} more` : ''}` : ''}`);
+      const integrityPatched = [];
+      for (const t of targetPaths(ide)) {
+        if (!fs.existsSync(t.abs)) { console.log(`skip (not found): ${t.rel}`); continue; }
+        const r = patchAgentBundle(t.abs, map, { lang: arg, version: pkgVersion(), target: t.rel });
+        console.log(`${r.status}: ${t.rel} — ${r.applied} replacements${r.missed && r.missed.length ? ` (missed ${r.missed.length}: ${r.missed.slice(0, 8).join(' | ')}${r.missed.length > 8 ? '…' : ''})` : ''}`);
+        if (r.status === 'patched') integrityPatched.push(t.integrity);
+      }
+      const synced = syncIntegrity(ide.appDir, integrityPatched);
+      if (synced.length) console.log(`product.json checksums synced: ${synced.join(', ')} (integrity check will pass)`);
       console.log('→ Fully close Antigravity windows (IDE + Manager) and reopen to apply. Restore with: agy18n restore-agent');
       break;
     }
     case 'restore-agent': {
       const ide = mustIde();
-      const r = restoreAgentBundle(agentBundlePath(ide));
-      console.log(`${r.status}${r.was ? ` (was: ${r.was})` : ''}: ${agentBundlePath(ide)}`);
+      for (const t of targetPaths(ide)) {
+        const r = restoreAgentBundle(t.abs);
+        if (r.status !== 'not-patched') console.log(`${r.status}${r.was ? ` (was: ${r.was})` : ''}: ${t.rel}`);
+      }
+      const ri = restoreIntegrity(ide.appDir);
+      if (ri.status === 'restored') console.log('restored: product.json (original checksums)');
+      console.log('done');
       break;
     }
     case 'agent-status': {
       const ide = mustIde();
-      const m = readMarker(agentBundlePath(ide));
-      console.log(m ? `patched: lang=${m.lang} applied=${m.applied} at ${m.patchedAt}` : 'agent-UI bundle: not patched');
+      for (const t of targetPaths(ide)) {
+        const m = readMarker(t.abs);
+        console.log(m ? `patched: ${t.rel} lang=${m.lang} applied=${m.applied} at ${m.patchedAt}` : `not patched: ${t.rel}`);
+      }
       break;
     }
     default:
