@@ -16,6 +16,7 @@ const { zipStore, unzip, crc32 } = require('../lib/zip');
 const { expandToPackFormat, computeDelta } = require('../lib/nls');
 const { applyTranslations, patchAgentBundle, restoreAgentBundle, restoreIntegrity, syncIntegrity, computeChecksum, readMarker, extractCandidates } = require('../lib/agentui');
 const { validate } = require('../lib/validate');
+const { doctor } = require('../lib/doctor');
 
 let passed = 0;
 const failures = [];
@@ -227,6 +228,45 @@ test('full IDE simulation: patch both targets + syncIntegrity matches every entr
     const actual = computeChecksum(fs.readFileSync(path.join(app, 'out', rel)));
     assert.equal(actual, ck, 'checksum mismatch for ' + rel);
   }
+});
+
+console.log('== doctor ==');
+const DOCTOR_IDE = (app) => ({ appDir: app, version: '1.0.0', ideVersion: '2.0.0', cli: null, dataDir: path.join(app, '..', 'data') });
+const FAKE_LIST = () => ({ ours: ['agy-i18n.antigravity-language-pack-tst-0.0.0'], base: ['ms-ceintl.fake'] });
+const FAKE_LOCALE = () => 'tst';
+
+test('doctor: healthy after patch + sync (only the known CLI warn)', () => {
+  const { app } = fakeApp();
+  for (const rel of ['jetskiAgent/main.js', 'vs/workbench/workbench.desktop.main.js']) {
+    patchAgentBundle(path.join(app, 'out', rel), MAP, { lang: 'tst', version: '0.0.0' });
+    syncIntegrity(app, [rel]);
+  }
+  const r = doctor({ ide: DOCTOR_IDE(app), listInstalled: FAKE_LIST, readLocale: FAKE_LOCALE });
+  const errors = r.checks.filter((c) => c.level === 'error');
+  assert.deepEqual(errors, []);
+  assert.ok(r.checks.some((c) => /Agent-UI patched/.test(c.msg)));
+  assert.ok(r.checks.some((c) => /all 2 product.json checksums match/.test(c.msg)));
+  assert.equal(r.checks.filter((c) => c.level === 'warn').length, 1, 'only the missing-CLI warn expected');
+});
+test('doctor: detects stale agent patch and suggests re-run', () => {
+  const { app } = fakeApp();
+  patchAgentBundle(path.join(app, 'out', 'jetskiAgent/main.js'), MAP, { lang: 'tst', version: '0.0.0' });
+  syncIntegrity(app, ['jetskiAgent/main.js']);
+  fs.writeFileSync(path.join(app, 'out', 'jetskiAgent', 'main.js'), 'const fresh=1;'); // IDE update replaced it
+  const r = doctor({ ide: DOCTOR_IDE(app), listInstalled: FAKE_LIST, readLocale: FAKE_LOCALE });
+  assert.ok(r.checks.some((c) => c.level === 'warn' && /patch is stale.*re-run: agy18n patch-agent tst/.test(c.msg)), JSON.stringify(r.checks));
+});
+test('doctor: flags integrity mismatch as error', () => {
+  const { app } = fakeApp();
+  // patch WITHOUT syncIntegrity -> product.json still holds pristine checksums
+  patchAgentBundle(path.join(app, 'out', 'jetskiAgent/main.js'), MAP, { lang: 'tst', version: '0.0.0' });
+  const r = doctor({ ide: DOCTOR_IDE(app), listInstalled: FAKE_LIST, readLocale: FAKE_LOCALE });
+  assert.ok(r.checks.some((c) => c.level === 'error' && /checksum\(s\) MISMATCH/.test(c.msg)), JSON.stringify(r.checks));
+});
+test('doctor: missing IDE reported as error', () => {
+  const r = doctor({ ide: null, listInstalled: FAKE_LIST, readLocale: FAKE_LOCALE });
+  assert.equal(r.ok, false);
+  assert.ok(r.checks[0].level === 'error');
 });
 
 console.log('');

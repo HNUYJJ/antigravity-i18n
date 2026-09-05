@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Self-test suite
+        run: npm test
+      - name: Build language pack VSIX
+        run: |
+          node bin/cli.js build zh-cn
+          node bin/cli.js build ja || true
+      - name: Create GitHub Release with VSIX assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.vsix
+          generate_release_notes: true
+      - name: Publish to Open VSX (requires OVSX_PAT secret)
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        if: env.OVSX_PAT != ''
+        run: |
+          for f in dist/*.vsix; do
+            npx ovsx publish --pat "$OVSX_PAT" "$f"
+          done

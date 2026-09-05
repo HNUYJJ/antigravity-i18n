@@ -49,6 +49,8 @@ Requires Node ≥ 18. Windows verified; macOS/Linux paths implemented (testers w
 | `node bin/cli.js install <lang>` | build + install via the IDE's own CLI + set `argv.json` locale |
 | `node bin/cli.js uninstall <lang>` | remove the pack for `<lang>` |
 | `node bin/cli.js validate <lang>` | quality gates: placeholders, markdown links, no-op translations (CI-enforced) |
+| `node bin/cli.js doctor` | full health check: install, packs, locale, patch state, product.json integrity — with fix hints |
+| `node bin/cli.js update <lang>` | one-shot post-IDE-update flow: scan → reinstall pack → re-patch → doctor |
 | `node bin/cli.js scan-agent` | extract candidate UI literals from the agent React bundle |
 | `node bin/cli.js patch-agent <lang>` | patch the agent-UI bundle (backup + syntax check + marker) |
 | `node bin/cli.js restore-agent` | restore the pristine agent-UI bundle |

@@ -12,6 +12,14 @@
   "bin": {
     "agy18n": "./bin/cli.js"
   },
+  "files": [
+    "bin/",
+    "lib/",
+    "locales/",
+    "tools/",
+    "LICENSE",
+    "README.md"
+  ],
   "engines": {
     "node": ">=18"
   },

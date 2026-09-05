@@ -19,10 +19,25 @@ const { buildVsix, extensionId } = require('../lib/vsix');
 const { install, uninstall, setLocale, listInstalled, readLocale } = require('../lib/install');
 const { extractCandidates, patchAgentBundle, restoreAgentBundle, targetPaths, syncIntegrity, restoreIntegrity, readMarker } = require('../lib/agentui');
 const { validate } = require('../lib/validate');
+const { doctor } = require('../lib/doctor');
+const { spawnSync } = require('child_process');
 
 /** Like mustIde, but build works in CI/containers without a local Antigravity install. */
 function optionalIde() {
   return findIde() || { appDir: '', version: '', ideVersion: '', dataDir: '', cli: null };
+}
+
+function antigravityRunning() {
+  try {
+    if (process.platform === 'win32') {
+      const r = spawnSync('tasklist', [], { encoding: 'utf8', windowsHide: true });
+      return /Antigravity( IDE)?\.exe/i.test(r.stdout || '');
+    }
+    const r = spawnSync('pgrep', ['-f', '[Aa]ntigravity'], { encoding: 'utf8' });
+    return (r.stdout || '').trim().length > 0;
+  } catch {
+    return false; // cannot tell — don't block
+  }
 }
 
 function languages() {
@@ -186,8 +201,13 @@ try {
       break;
     }
     case 'patch-agent': {
-      if (!arg) { console.error('usage: agy18n patch-agent <lang>'); process.exit(1); }
+      if (!arg) { console.error('usage: agy18n patch-agent <lang> [--force]'); process.exit(1); }
       mustLang(arg);
+      if (antigravityRunning() && !flags.includes('--force')) {
+        console.error('Antigravity appears to be running. Close all its windows (IDE + Manager) first,');
+        console.error('or retry with --force (changes apply on next restart).');
+        process.exit(1);
+      }
       const ide = mustIde();
       const mapFile = path.join(repoRoot, 'locales', arg, 'agent-ui.json');
       if (!fs.existsSync(mapFile)) { console.error(`no agent-ui map: ${path.relative(repoRoot, mapFile)}`); process.exit(1); }
@@ -229,6 +249,49 @@ try {
         const m = readMarker(t.abs);
         console.log(m ? `patched: ${t.rel} lang=${m.lang} applied=${m.applied} at ${m.patchedAt}` : `not patched: ${t.rel}`);
       }
+      break;
+    }
+    case 'doctor': {
+      const ide = findIde();
+      const r = doctor({ ide, listInstalled, readLocale });
+      for (const c of r.checks) console.log(`${c.level === 'ok' ? ' ✔' : c.level === 'warn' ? ' ⚠' : ' ✘'} ${c.msg}`);
+      if (!r.ok) {
+        console.error('\nNot healthy — follow the suggestions above, then re-run: agy18n doctor');
+        process.exit(1);
+      }
+      console.log('\nAll checks passed.');
+      break;
+    }
+    case 'update': {
+      if (!arg) { console.error('usage: agy18n update <lang>'); process.exit(1); }
+      const meta = mustLang(arg);
+      const ide = mustIde();
+      console.log('[1/4] scan — refresh translation worklists');
+      scan({ repoRoot, ide });
+      console.log('[2/4] build + install language pack');
+      const built = buildVsix({ repoRoot, lang: arg, meta, outDir: path.join(repoRoot, 'dist'), version: pkgVersion(), ideInfo: ide });
+      const ir = install(ide, built.outFile, arg, pkgVersion(), { verbose });
+      setLocale(ide.dataDir, meta.languageId);
+      console.log(`      ${ir.how}: ${built.translated} NLS strings installed`);
+      console.log('[3/4] patch agent-UI bundles');
+      const mapFile = path.join(repoRoot, 'locales', arg, 'agent-ui.json');
+      if (fs.existsSync(mapFile)) {
+        const raw = JSON.parse(fs.readFileSync(mapFile, 'utf8'));
+        const map = Object.fromEntries(Object.entries(raw).filter(([k]) => !k.startsWith('_')));
+        const integrityPatched = [];
+        for (const t of targetPaths(ide)) {
+          if (!fs.existsSync(t.abs)) continue;
+          const r = patchAgentBundle(t.abs, map, { lang: arg, version: pkgVersion(), target: t.rel });
+          if (r.status === 'patched') integrityPatched.push(t.integrity);
+        }
+        syncIntegrity(ide.appDir, integrityPatched);
+      } else {
+        console.log('      no agent-ui map for this language, skipped');
+      }
+      console.log('[4/4] doctor');
+      const dr = doctor({ ide, listInstalled, readLocale });
+      for (const c of dr.checks) console.log(`${c.level === 'ok' ? ' ✔' : c.level === 'warn' ? ' ⚠' : ' ✘'} ${c.msg}`);
+      process.exitCode = dr.ok ? 0 : 1;
       break;
     }
     default:
