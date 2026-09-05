@@ -23,18 +23,24 @@ On Antigravity IDE 2.5.5 the NLS delta is ~1,166 strings for zh-cn and the React
 
 ## Quick start
 
+No clone needed (requires Node ≥ 18 + git):
+
+```bash
+npx github:HNUYJJ/antigravity-i18n install zh-cn      # language pack via the IDE's own CLI
+npx github:HNUYJJ/antigravity-i18n patch-agent zh-cn  # Agent Manager + agent panel (close Antigravity first)
+npx github:HNUYJJ/antigravity-i18n doctor             # verify everything, get fix hints
+```
+
+Or clone if you prefer / want to contribute:
+
 ```bash
 git clone https://github.com/HNUYJJ/antigravity-i18n
 cd antigravity-i18n
-
-# 1) workbench-level agent UI + full integration (official language pack):
-node bin/cli.js install zh-cn     # build + install + set locale; restart Antigravity IDE
-
-# 2) Agent Manager window + React agent panel:
-node bin/cli.js patch-agent zh-cn # fully close Antigravity windows first; restore: restore-agent
+node bin/cli.js install zh-cn       # build + install + set locale; restart Antigravity IDE
+node bin/cli.js patch-agent zh-cn   # fully close Antigravity windows first; restore: restore-agent
 ```
 
-No Node on your machine? Grab a prebuilt VSIX from [Releases](https://github.com/HNUYJJ/antigravity-i18n/releases) and install it with Antigravity's own CLI: `"Antigravity IDE.exe" --install-extension <file>.vsix`.
+No Node on your machine? Grab a prebuilt VSIX from [Releases](https://github.com/HNUYJJ/antigravity-i18n/releases) and install it with Antigravity's own CLI: `"Antigravity IDE.exe" --install-extension <file>.vsix`. Marketplace one-click install is next (see "Publishing to Open VSX" below).
 
 Requires Node ≥ 18. Windows verified; macOS/Linux paths implemented (testers welcome).
 
@@ -81,11 +87,22 @@ Adding a language is two JSON files: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 **Does this modify or break Antigravity?** The language-pack path never touches app files — it installs a standard extension via the IDE's own CLI and sets `argv.json`'s `locale`. `patch-agent` modifies one JS bundle, with backup + pre-write syntax validation + hash marker; `restore-agent` reverts it exactly.
 
-**What happens when Antigravity updates?** The language pack keeps working — new/changed strings fall back to English; re-run `scan` for the new (usually tiny) delta. For the agent bundle, the marker hash won't match the replaced file anymore, so `patch-agent` automatically backs up the *new* pristine bundle and re-applies.
+**What happens when Antigravity updates?** The language pack keeps working — new/changed strings fall back to English. For the agent bundles, the marker hash won't match the replaced file anymore, so `patch-agent` automatically backs up the *new* pristine bundle and re-applies. In practice: `node bin/cli.js update zh-cn && node bin/cli.js doctor` after every IDE update tells you exactly where you stand.
 
 **Is this affiliated with Google?** No. "Antigravity" is a trademark of Google LLC; this is an independent community project, nominatively describing what it translates. All translations are original work by contributors, MIT-licensed.
 
-**Why not inject into the asar like other localization tools?** We do where there is no alternative (the React agent surfaces), but as a *reversible, validated, marked* patch of a single file — not asar repacking. The language-pack mechanism is the supported path wherever it exists, and it covers far more than the Chinese-only tools ever attempted.
+**Why not inject into the asar like other localization tools?** We do where there is no alternative (the React agent surfaces), but as a *reversible, validated, marked* patch of single files — not asar repacking. The language-pack mechanism is the supported path wherever it exists, and it covers far more than the Chinese-only tools ever attempted.
+
+## Publishing to Open VSX (marketplace one-click install)
+
+Antigravity installs extensions from [Open VSX](https://open-vsx.org). To make these packs one-click installable from the IDE's extension panel:
+
+1. Create an account on open-vsx.org, then register the `agy-i18n` namespace (Open VSX → Manage Namespaces).
+2. Create an access token (Open VSX → Settings → Access Tokens).
+3. Add it as the `OVSX_PAT` secret in this repository (Settings → Secrets → Actions).
+4. Push a `v*` tag — the [release workflow](.github/workflows/release.yml) builds the VSIX, attaches it to a GitHub Release, and publishes to Open VSX. Users then install "Antigravity Language Pack · 中文（简体）" directly from the IDE.
+
+Note: only the zh-cn pack ships NLS strings today (ja is agent-UI-only via `patch-agent` until its NLS seed lands), so only the zh-cn VSIX is useful on Open VSX for now.
 
 ## Roadmap
 
