@@ -1,5 +1,7 @@
 # antigravity-i18n
 
+[![CI](https://github.com/HNUYJJ/antigravity-i18n/actions/workflows/ci.yml/badge.svg)](https://github.com/HNUYJJ/antigravity-i18n/actions/workflows/ci.yml)
+
 **Community language packs for [Google Antigravity](https://antigravity.google) — in every language, not just one.**
 **Google Antigravity 社区多语言语言包 —— 让 Agent 时代的 IDE 说你的母语。**
 
@@ -26,11 +28,13 @@ git clone https://github.com/HNUYJJ/antigravity-i18n
 cd antigravity-i18n
 
 # 1) workbench-level agent UI + full integration (official language pack):
-npm run install -- zh-cn          # build + install + set locale; restart Antigravity IDE
+node bin/cli.js install zh-cn     # build + install + set locale; restart Antigravity IDE
 
 # 2) Agent Manager window + React agent panel:
 node bin/cli.js patch-agent zh-cn # fully close Antigravity windows first; restore: restore-agent
 ```
+
+No Node on your machine? Grab a prebuilt VSIX from [Releases](https://github.com/HNUYJJ/antigravity-i18n/releases) and install it with Antigravity's own CLI: `"Antigravity IDE.exe" --install-extension <file>.vsix`.
 
 Requires Node ≥ 18. Windows verified; macOS/Linux paths implemented (testers welcome).
 
@@ -44,6 +48,7 @@ Requires Node ≥ 18. Windows verified; macOS/Linux paths implemented (testers w
 | `node bin/cli.js build <lang>` | build `dist/antigravity-language-pack-<lang>-*.vsix` |
 | `node bin/cli.js install <lang>` | build + install via the IDE's own CLI + set `argv.json` locale |
 | `node bin/cli.js uninstall <lang>` | remove the pack for `<lang>` |
+| `node bin/cli.js validate <lang>` | quality gates: placeholders, markdown links, no-op translations (CI-enforced) |
 | `node bin/cli.js scan-agent` | extract candidate UI literals from the agent React bundle |
 | `node bin/cli.js patch-agent <lang>` | patch the agent-UI bundle (backup + syntax check + marker) |
 | `node bin/cli.js restore-agent` | restore the pristine agent-UI bundle |
@@ -62,8 +67,8 @@ Zero npm dependencies. Windows / macOS / Linux.
 
 | language | NLS strings | agent-UI strings | status |
 | --- | --- | --- | --- |
-| 🇨🇳 中文（简体） zh-cn | 409 / 1166 | ~330 keys / 952 replacements applied | seeded by @HNUYJJ — **PRs welcome** |
-| 🇯🇵 日本語 ja | — | — | **help wanted** |
+| 🇨🇳 中文（简体） zh-cn | 409 / 1166 | 391 keys — 2,182 replacements applied | seeded by @HNUYJJ — **PRs welcome** |
+| 🇯🇵 日本語 ja | — | 391 keys seeded | agent-UI usable now (`patch-agent ja`); NLS **help wanted** |
 | 🇰🇷 한국어 ko | — | — | **help wanted** |
 | 🇷🇺 Русский ru | — | — | **help wanted** |
 | 🇪🇸 🇧🇷 🇫🇷 🇩🇪 🇹🇷 … | — | — | **help wanted** |

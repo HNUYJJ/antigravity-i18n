@@ -59,7 +59,14 @@ Rules for `agent-ui.json`:
 
 ## 5. Open the PR
 
-One language per PR. Run `node bin/cli.js build <lang>` to make sure the VSIX builds, and paste the string count in the PR description. Translators get credited in the release notes and the README table — that's the deal.
+One language per PR. Before submitting:
+
+```bash
+node bin/cli.js validate <lang>   # placeholders / markdown links / no-op gates — CI enforces this too
+node bin/cli.js build <lang>      # make sure the VSIX builds
+```
+
+Paste the string count in the PR description. Translators get credited in the release notes and the README table — that's the deal.
 
 ## After Antigravity updates
 

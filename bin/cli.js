@@ -18,6 +18,12 @@ const { scan, topModules } = require('../lib/scan');
 const { buildVsix, extensionId } = require('../lib/vsix');
 const { install, uninstall, setLocale, listInstalled, readLocale } = require('../lib/install');
 const { extractCandidates, patchAgentBundle, restoreAgentBundle, targetPaths, syncIntegrity, restoreIntegrity, readMarker } = require('../lib/agentui');
+const { validate } = require('../lib/validate');
+
+/** Like mustIde, but build works in CI/containers without a local Antigravity install. */
+function optionalIde() {
+  return findIde() || { appDir: '', version: '', ideVersion: '', dataDir: '', cli: null };
+}
 
 function languages() {
   return JSON.parse(fs.readFileSync(path.join(repoRoot, 'locales', 'languages.json'), 'utf8'));
@@ -77,15 +83,36 @@ try {
     }
     case 'build': {
       if (!arg) { console.error('usage: agy18n build <lang>'); process.exit(1); }
-      const ide = mustIde();
       const meta = mustLang(arg);
+      if (!fs.existsSync(path.join(repoRoot, 'locales', arg, 'strings.json'))) {
+        console.log(`${arg}: no NLS strings.json yet — nothing to build as a VSIX.`);
+        console.log('(agent-UI translations work independently: agy18n patch-agent ' + arg + ')');
+        break;
+      }
       const r = buildVsix({
         repoRoot, lang: arg, meta,
         outDir: path.join(repoRoot, 'dist'),
         version: pkgVersion(),
-        ideInfo: ide,
+        ideInfo: optionalIde(),
       });
       console.log(`Built ${path.relative(repoRoot, r.outFile)} — ${r.translated} translated strings across ${r.modules} modules`);
+      break;
+    }
+    case 'validate': {
+      if (!arg) { console.error('usage: agy18n validate <lang>'); process.exit(1); }
+      mustLang(arg);
+      const r = validate(repoRoot, arg);
+      if (!r.nls.available) console.log(`nls strings.json : skipped (${r.nls.reason})`);
+      else console.log(`nls strings.json : ${r.nls.translated}/${r.nls.total} translated`);
+      if (!r.agent.available) console.log(`agent-ui.json    : skipped (${r.agent.reason})`);
+      else console.log(`agent-ui.json    : ${r.agent.translated}/${r.agent.total} translated`);
+      if (r.ok) {
+        console.log(`OK — no quality gate violations for ${arg}`);
+      } else {
+        console.error(`FAIL — ${r.problems.length} violation(s):`);
+        for (const p of r.problems) console.error('  - ' + p);
+        process.exit(1);
+      }
       break;
     }
     case 'install': {

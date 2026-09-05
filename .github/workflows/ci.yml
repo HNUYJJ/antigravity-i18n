@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate translation quality gates
+        run: |
+          node bin/cli.js validate zh-cn
+          node bin/cli.js validate ja
+      - name: Build language pack VSIX (no local IDE needed)
+        run: |
+          node bin/cli.js build zh-cn
+          node bin/cli.js build ja
+      - name: Upload VSIX artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: language-pack-vsix
+          path: dist/*.vsix
+          if-no-files-found: error

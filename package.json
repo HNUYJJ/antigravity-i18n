@@ -19,7 +19,7 @@
     "scan": "node bin/cli.js scan",
     "status": "node bin/cli.js status",
     "build": "node bin/cli.js build",
-    "install": "node bin/cli.js install"
+    "validate": "node bin/cli.js validate"
   },
   "keywords": [
     "antigravity",
