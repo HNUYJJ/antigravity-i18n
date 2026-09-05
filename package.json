@@ -16,6 +16,7 @@
     "node": ">=18"
   },
   "scripts": {
+    "test": "node tools/selftest.js",
     "scan": "node bin/cli.js scan",
     "status": "node bin/cli.js status",
     "build": "node bin/cli.js build",

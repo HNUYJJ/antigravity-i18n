@@ -46,7 +46,7 @@ function mustLang(lang) {
   const langs = languages();
   const meta = langs[lang];
   if (!meta) {
-    console.error(`Unknown language "${lang}". Known: ${Object.keys(langs).join(', ')}.\nAdd it to locales/languages.json first (see CONTRIBUTING.md).`);
+    console.error(`Unknown language "${lang}". Known: ${Object.keys(langs).filter((k) => !/^[$_]/.test(k)).join(', ')}.\nAdd it to locales/languages.json first (see CONTRIBUTING.md).`);
     process.exit(1);
   }
   return meta;
@@ -79,6 +79,13 @@ try {
       const inst = listInstalled(ide);
       console.log(`Our packs   : ${inst.ours.join(', ') || 'none'}`);
       console.log(`Base packs  : ${inst.base.join(', ') || 'none'}`);
+      for (const t of targetPaths(ide)) {
+        const m = readMarker(t.abs);
+        if (m) console.log(`Agent patch : ${t.rel} lang=${m.lang} applied=${m.applied} at ${m.patchedAt}`);
+      }
+      if (fs.existsSync(path.join(ide.appDir, 'product.json') + '.agy-orig')) {
+        console.log('Integrity   : product.json checksums updated by antigravity-i18n (pristine backup present)');
+      }
       break;
     }
     case 'build': {
@@ -163,13 +170,19 @@ try {
     }
     case 'scan-agent': {
       const ide = mustIde();
-      const bundle = agentBundlePath(ide);
-      const cands = extractCandidates(fs.readFileSync(bundle, 'utf8'));
-      const filtered = cands.filter((s) => /^[A-Z][A-Za-z0-9 '&,.:%+()/\-]{2,58}$/.test(s) && /[a-z]{3}/.test(s));
+      const targets = targetPaths(ide);
+      const all = new Set();
+      for (const t of targets) {
+        if (!fs.existsSync(t.abs)) { console.log(`skip (not found): ${t.rel}`); continue; }
+        for (const c of extractCandidates(fs.readFileSync(t.abs, 'utf8'))) all.add(c);
+      }
+      const filtered = [...all]
+        .filter((s) => /^[A-Z][A-Za-z0-9 '&,.:%+()/@\-]{2,58}$/.test(s) && /[a-z]{3}/.test(s))
+        .sort();
       const out = path.join(repoRoot, 'locales', '_meta', 'agent-ui.filtered.json');
       fs.mkdirSync(path.dirname(out), { recursive: true });
       fs.writeFileSync(out, JSON.stringify(filtered, null, 1));
-      console.log(`${path.relative(repoRoot, bundle)}: ${filtered.length} candidate UI strings -> ${path.relative(repoRoot, out)}`);
+      console.log(`${filtered.length} candidate UI strings across ${targets.length} bundles -> ${path.relative(repoRoot, out)}`);
       break;
     }
     case 'patch-agent': {
@@ -181,12 +194,19 @@ try {
       const raw = JSON.parse(fs.readFileSync(mapFile, 'utf8'));
       const map = Object.fromEntries(Object.entries(raw).filter(([k]) => !k.startsWith('_')));
       const integrityPatched = [];
+      const mapKeys = Object.keys(map);
+      const found = new Set();
+      let totalApplied = 0;
       for (const t of targetPaths(ide)) {
         if (!fs.existsSync(t.abs)) { console.log(`skip (not found): ${t.rel}`); continue; }
         const r = patchAgentBundle(t.abs, map, { lang: arg, version: pkgVersion(), target: t.rel });
-        console.log(`${r.status}: ${t.rel} — ${r.applied} replacements${r.missed && r.missed.length ? ` (missed ${r.missed.length}: ${r.missed.slice(0, 8).join(' | ')}${r.missed.length > 8 ? '…' : ''})` : ''}`);
+        for (const k of mapKeys) if (!(r.missed || []).includes(k)) found.add(k);
+        totalApplied += r.applied || 0;
+        console.log(`${r.status}: ${t.rel} — ${r.applied} replacements`);
         if (r.status === 'patched') integrityPatched.push(t.integrity);
       }
+      const missedAll = mapKeys.filter((k) => !found.has(k));
+      console.log(`total: ${totalApplied} replacements${missedAll.length ? ` | not found in any bundle (${missedAll.length}): ${missedAll.slice(0, 8).join(' | ')}${missedAll.length > 8 ? '…' : ''}` : ''}`);
       const synced = syncIntegrity(ide.appDir, integrityPatched);
       if (synced.length) console.log(`product.json checksums synced: ${synced.join(', ')} (integrity check will pass)`);
       console.log('→ Fully close Antigravity windows (IDE + Manager) and reopen to apply. Restore with: agy18n restore-agent');

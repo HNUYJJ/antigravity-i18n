@@ -61,7 +61,7 @@ Requires Node ≥ 18. Windows verified; macOS/Linux paths implemented (testers w
 3. **build** packages the NLS part into a standard language-pack VSIX (`contributes.localizations`, engine `*`); **install** uses Antigravity's own CLI — the same mechanism as the official MS pack. Verified: both packs register and merge in the IDE's `languagepacks.json`.
 4. **patch-agent** replaces exact string literals in the React bundle (`"Queued Messages"` → `"排队消息"`), preserving quote styles and JS escapes. Enum-like values used in logic (e.g. `Queue`, `Running`) are deliberately left untranslated.
 
-Zero npm dependencies. Windows / macOS / Linux.
+Zero npm dependencies. Windows / macOS / Linux. `npm test` runs an 18-case offline self-test suite (zip roundtrip, checksum format, NLS diffing, replacement edge cases, validate gates, and the full patch lifecycle: patch → idempotence → restore → rebase-after-update → downgrade-guard), enforced in CI.
 
 ## Language status
 
